@@ -4,7 +4,9 @@ import matplotlib
 import pylatexenc
 from enum import Enum
 from qiskit.visualization import plot_histogram
-import matplotlib.pyplot as plt 
+import matplotlib.pyplot as plt
+import copy
+from typing import Tuple
 
 class Direction(Enum):
     UP = 0
@@ -18,6 +20,11 @@ class BellState(Enum):
     PSIPLUS = 2
     PSIMINUS = 3
 
+class TurnResult(Enum):
+    HIT = 0
+    SUNK = 1
+    MISS = 2
+
 class Board:
     BOARD_SIZE = 2
     def __init__(self):
@@ -26,15 +33,17 @@ class Board:
         """
         self.board = [] # 8 x 8 board
         self.ships = {} # list of ships
-        self.targeted = [] # Measured/greyed out spaces
+        self.targeted_indices = [] # Measured/greyed out spaces
+        self.past_boards = []
         self.qr = QuantumRegister(self.BOARD_SIZE ** 2)
         self.cr = ClassicalRegister(self.BOARD_SIZE ** 2)
         self.qc = QuantumCircuit(self.qr, self.cr)
-        for i in range(self.BOARD_SIZE):
-            self.board.append([0 for i in range(self.BOARD_SIZE)])
-            # superposition for all qubits
-            for j in range(self.BOARD_SIZE):
-                self.qc.h(i * self.BOARD_SIZE + j)
+        # for i in range(self.BOARD_SIZE):
+        #     self.board.append([0 for i in range(self.BOARD_SIZE)])
+        #     # superposition for all qubits
+        #     for j in range(self.BOARD_SIZE):
+        #         self.qc.h(i * self.BOARD_SIZE + j)
+        self.reset_board()
 
     def __str__(self):
         """
@@ -47,6 +56,12 @@ class Board:
             st += '|\n'
             st += ("-" * (self.BOARD_SIZE * 2 + 1)) + "\n"
         return st
+
+    def get_num_ships(self):
+        """
+        Returns the number of remaining ships
+        """
+        return len(self.ships)
 
     def place_ship(self, bs: BellState, i: int, j: int, dir: Direction):
         """
@@ -67,6 +82,12 @@ class Board:
         spot_1 = (self.BOARD_SIZE * i + j)
         spot_2 = (self.BOARD_SIZE * other_index[0] + other_index[1])
         self.make_bell_state(spot_1, spot_2, bs)
+
+    def sink_ship(self, bs: BellState):
+        """
+        Removes a ship once it is sunk
+        """
+        del self.ships[bs]
         
     def make_bell_state(self, ship_1: int, ship_2: int, bs: BellState):
         """
@@ -88,7 +109,7 @@ class Board:
         Logic for shooting a ship.
         Add to targeted, measure, print board
         """
-        self.targeted.append(self.BOARD_SIZE * ship_i + ship_j)
+        self.targeted_indices.append(self.BOARD_SIZE * ship_i + ship_j)
         self.measure_board()
         print(self)
 
@@ -102,8 +123,8 @@ class Board:
         #         index = i * self.BOARD_SIZE + j
         #         if index not in self.targeted:
         #             self.qc.measure(index, index)
-        self.qc.measure([i for i in range(self.BOARD_SIZE ** 2) if i not in self.targeted], 
-                        [i for i in range(self.BOARD_SIZE ** 2) if i not in self.targeted])
+        self.qc.measure([i for i in range(self.BOARD_SIZE ** 2) if i not in self.targeted_indices],
+                        [i for i in range(self.BOARD_SIZE ** 2) if i not in self.targeted_indices])
         #self.qc.draw('mpl')
         #plt.show()
 
@@ -113,14 +134,15 @@ class Board:
         result = list(counts.keys())[0]
         print(result)
         for i, value in enumerate(reversed(result)):
-            if i not in self.targeted:
+            if i not in self.targeted_indices:
                 self.board[i // self.BOARD_SIZE][i % self.BOARD_SIZE] = value
             else:
                 self.board[i // self.BOARD_SIZE][i % self.BOARD_SIZE] = 'X'
         
         # update state and reset board
-        # TODO hit/miss, entanglement swapping
         self.reset_board()
+
+        return copy.deepcopy(self.board)
 
     def reset_board(self):
         """
@@ -133,17 +155,65 @@ class Board:
         for i in range(self.BOARD_SIZE ** 2):
             self.qc.h(i)
         
-        for ship in self.ships:
+        for bs in self.ships:
             self.make_bell_state(
-                                self.BOARD_SIZE * self.ships[ship][0][0] + self.ships[ship][0][1],
-                                self.BOARD_SIZE * self.ships[ship][1][0] + self.ships[ship][1][1],
-                                ship
+                                self.BOARD_SIZE * self.ships[bs][0][0] + self.ships[bs][0][1],
+                                self.BOARD_SIZE * self.ships[bs][1][0] + self.ships[bs][1][1],
+                                bs
             )
-                
 
-    def entangle_swap(self, hit_space, new_space):
-        self.qc.swap(hit_space, new_space)
-        
+    def init_board(self):
+        """
+        Resets the board, measures its new state, and adds that state to the hostory
+        """
+        self.reset_board()
+        self.past_boards.append(self.measure_board())
+
+    def move_ship(self, bs: BellState, hit_space: Tuple[int, int], new_space: Tuple[int, int]):
+        """
+        Moves a ship to a new position in the case that it was only partially hit
+        """
+        self._entangle_swap(self.BOARD_SIZE * hit_space[0] + hit_space[1],
+                            self.BOARD_SIZE * new_space[0] + new_space[1])
+        current_pair = self.ships[bs]
+        pivot_space = current_pair[0] if current_pair[1] == hit_space else current_pair[1]
+        self.ships[bs] = [pivot_space, new_space]
+
+    def _entangle_swap(self, hit_index, new_index, pivot_index = None, extra_index = None):
+        """
+        Implements entanglement swapping
+        """
+        self.qc.swap(hit_index, new_index)
+
+    def get_attack_result(self, row: int, col: int):
+        """
+        Returns the result of an attack on a given space
+        """
+        self.targeted_indices.append(self.BOARD_SIZE * row + col)
+        for bs, pair in self.ships.items():
+            if (row, col) in pair:
+                if all([self.BOARD_SIZE * location[0] + location[1] in self.targeted_indices for location in pair]):
+                    self.sink_ship(bs)
+                    return TurnResult.SUNK, bs
+                return TurnResult.HIT
+        return TurnResult.MISS
+
+    def check_conflict(self, row: int, col: int):
+        """
+        Returns whether the given placement is invalid
+        """
+        index = self.BOARD_SIZE * row + col
+        ship_locs = []
+        for pair in self.ships.items():
+            ship_locs.append(pair[0])
+            ship_locs.append(pair[1])
+
+        if index not in self.targeted_indices:
+            if (row, col) not in ship_locs:
+                if all([0 <= num <= self.BOARD_SIZE for num in (row, col)]):
+                    return False
+
+        return True
 
     def lost(self):
         """
