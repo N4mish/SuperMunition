@@ -22,6 +22,7 @@ class TurnResult(Enum):
     HIT = 0
     SUNK = 1
     MISS = 2
+    INVALID = 3
 
 states = {BellState.PHIPLUS: "Φ+", BellState.PHIMINUS: "Φ-", BellState.PSIPLUS: "𝛙+", BellState.PSIMINUS: "𝛙-"}
 
@@ -67,7 +68,7 @@ class Board:
             st += ("-" * (self.BOARD_SIZE * 3 + 1)) + "\n"
         return st
 
-    def see_ships(self):
+    def see_ships(self, i = -1, j = -1):
         """
         Returns a string representation of the board with ship locations
         """
@@ -79,7 +80,11 @@ class Board:
         for row in range(self.BOARD_SIZE):
             for col in range(self.BOARD_SIZE):
                 loc = row * self.BOARD_SIZE + col
-                if loc in list(ship_locs.keys()):
+                if i == row and j == col:
+                    st += "|O "
+                elif loc in self.miss_indices or loc in self.ship_hit_indices:
+                    st += f"|X "
+                elif loc in list(ship_locs.keys()):
                     st += f"|{ship_locs[loc]}"
                 else:
                     st += f"|  "
@@ -167,7 +172,7 @@ class Board:
             if i in self.miss_indices:
                 self.board[i // self.BOARD_SIZE][i % self.BOARD_SIZE] = 'X '
             elif i in self.ship_hit_indices.keys():
-                self.board[i // self.BOARD_SIZE][i % self.BOARD_SIZE] = f"{states[self.ship_hit_indices[i]]} "
+                self.board[i // self.BOARD_SIZE][i % self.BOARD_SIZE] = f"{states[self.ship_hit_indices[i]]}"
             else:
                 self.board[i // self.BOARD_SIZE][i % self.BOARD_SIZE] = f"{value} "
 
@@ -198,11 +203,22 @@ class Board:
         """
         self.reset_board()
         self.past_boards.append(self.measure_board())
+    
+    def movable(self, i, j, hi, hj):
+        """
+        Returns true if ship square is movable, false if not.
+        """
+        dirs = [[-1, 0, 1, 0], [0, 1, 0, -1]]
+        for x in range(len(dirs[0])):
+            if not (i + dirs[0][x] == hi and j + dirs[1][x] == hj) and not self.check_conflict(i + dirs[0][x], j + dirs[1][x]):
+                return True
+        return False
 
     def move_ship(self, bs: BellState, hit_space: Tuple[int, int], new_space: Tuple[int, int]):
         """
         Moves a ship to a new position in the case that it was only partially hit
         """
+        
         self._entangle_swap(self.BOARD_SIZE * hit_space[0] + hit_space[1],
                             self.BOARD_SIZE * new_space[0] + new_space[1])
         current_pair = self.ships[bs]
@@ -219,15 +235,18 @@ class Board:
         """
         Returns the result of an attack on a given space
         """
+        index = self.BOARD_SIZE * row + col
+        if index in self.miss_indices or index in self.ship_hit_indices.keys() or not all([0 <= num < self.BOARD_SIZE for num in (row, col)]):
+            return (TurnResult.INVALID, None)
         for bs, pair in self.ships.items():
             if [row, col] in pair:
-                self.ship_hit_indices[self.BOARD_SIZE * row + col] = bs
-                if all([self.BOARD_SIZE * location[0] + location[1] in self.miss_indices for location in pair]):
+                self.ship_hit_indices[index] = bs
+                if all([self.BOARD_SIZE * location[0] + location[1] in self.ship_hit_indices for location in pair]):
                     self.sink_ship(bs)
                     return (TurnResult.SUNK, bs)
                 return (TurnResult.HIT, bs)
 
-        self.miss_indices.append(self.BOARD_SIZE * row + col)
+        self.miss_indices.append(index)
         return (TurnResult.MISS, None)
 
     def check_conflict(self, row: int, col: int):
