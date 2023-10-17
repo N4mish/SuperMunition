@@ -99,7 +99,6 @@ def move_ship(p: Board, opponent: Board, surv_bs: BellState):
 
     print(p.see_ships()) # print the updated board
     print("ENTANGLEMENT SWAPPING COMPLETE.")
-    time.sleep(2)
     blank_terminal()
 
 def shoot_ship(p: Board, opponent: Board, i: int, j: int, surv_bs: BellState = None):
@@ -142,7 +141,6 @@ def shoot_ship(p: Board, opponent: Board, i: int, j: int, surv_bs: BellState = N
     
     else:
         print("You missed.")
-        time.sleep(2)
         if surv_bs is not None:
             for loc in p.ships[surv_bs]:
                 if Board.BOARD_SIZE * loc[0] + loc[1] in p.ship_hit_indices:
@@ -150,9 +148,10 @@ def shoot_ship(p: Board, opponent: Board, i: int, j: int, surv_bs: BellState = N
                 else:
                     pivot = loc
             if p.movable(pivot[0], pivot[1], hit_space[0], hit_space[1]):
+                time.sleep(2)
                 move_ship(p, opponent, surv_bs)
             else:
-                print("The ship is trapped! Go sink it!")
+                print("The ship is trapped! Sink it on your next turn!")
     return False
 
 def game_loop(p1: Board, p2: Board):
@@ -187,6 +186,7 @@ def game_loop(p1: Board, p2: Board):
             i,j = map(int, choice.split())
             if shoot_ship(player, opponent, i, j):
                 return num
+            time.sleep(3)
 
 # main function to kick off the game.
 if __name__ == "__main__":

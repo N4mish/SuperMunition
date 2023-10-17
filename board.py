@@ -224,7 +224,7 @@ class Board:
                             self.BOARD_SIZE * new_space[0] + new_space[1])
         current_pair = self.ships[bs]
         pivot_space = current_pair[0] if current_pair[1] == hit_space else current_pair[1]
-        self.ships[bs] = [pivot_space, new_space]
+        self.ships[bs] = [pivot_space, list(new_space)]
 
     def _entangle_swap(self, hit_index, new_index, pivot_index = None, extra_index = None):
         """
@@ -263,9 +263,10 @@ class Board:
             ship_locs.append(pair[1])
             
         if index not in self.miss_indices:
-            if [row, col] not in ship_locs:
-                if all([0 <= num < self.BOARD_SIZE for num in (row, col)]):
-                    return False
+            if index not in self.ship_hit_indices:
+                if [row, col] not in ship_locs:
+                    if all([0 <= num < self.BOARD_SIZE for num in (row, col)]):
+                        return False
 
         return True
 
