@@ -5,7 +5,6 @@ from qiskit.visualization import plot_histogram
 import copy
 from typing import Tuple
 
-
 class Direction(Enum):
     UP = 0
     DOWN = 1
@@ -77,6 +76,8 @@ class Board:
             for loc in pair:
                 ship_locs[loc[0] * self.BOARD_SIZE + loc[1]] = states[bs]
         st = ("-" * (self.BOARD_SIZE * 3 + 1)) + "\n"
+
+        # go through the board, print O for the just hit spot, X for a missed spot, Bell state for hit ships, blank otherwise.
         for row in range(self.BOARD_SIZE):
             for col in range(self.BOARD_SIZE):
                 loc = row * self.BOARD_SIZE + col
@@ -238,6 +239,8 @@ class Board:
         index = self.BOARD_SIZE * row + col
         if index in self.miss_indices or index in self.ship_hit_indices.keys() or not all([0 <= num < self.BOARD_SIZE for num in (row, col)]):
             return (TurnResult.INVALID, None)
+
+        # otherwise, loop through items and possibly hit/sink a ship
         for bs, pair in self.ships.items():
             if [row, col] in pair:
                 self.ship_hit_indices[index] = bs
