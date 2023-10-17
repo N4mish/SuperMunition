@@ -83,7 +83,7 @@ def move_ship(p: Board, opponent: Board, surv_bs: BellState):
             pivot = loc
     blank_terminal()
     print("ENTANGLEMENT SWAPPING TIME\nOPPONENT: MAKE YOUR CHOICE\n-\nCURRENT PLAYER: LOOK AWAY")
-    time.sleep(5)
+    time.sleep(3)
 
     print(p.see_ships(hit_space[0], hit_space[1]))
     print(f"\nYour current {states[surv_bs]} ship is at position ({pivot[0]},{pivot[1]})-({hit_space[0]},{hit_space[1]})")
@@ -99,7 +99,6 @@ def move_ship(p: Board, opponent: Board, surv_bs: BellState):
 
     print(p.see_ships()) # print the updated board
     print("ENTANGLEMENT SWAPPING COMPLETE.")
-    blank_terminal()
 
 def shoot_ship(p: Board, opponent: Board, i: int, j: int, surv_bs: BellState = None):
     """
@@ -187,6 +186,7 @@ def game_loop(p1: Board, p2: Board):
             if shoot_ship(player, opponent, i, j):
                 return num
             time.sleep(3)
+            blank_terminal()
 
 # main function to kick off the game.
 if __name__ == "__main__":
